@@ -145,40 +145,52 @@ def collect(today):
     return unique[:100], errors
 
 
-def render(payload):
-    esc = html.escape
-    today = payload["date"]
-    items = payload["offers"]
-    count = len(items)
-    cards = []
-    for offer in items:
-        badge = "official" if offer["source_type"] == "官方来源线索" else "media"
-        cards.append(
-            '<article class="card">'
-            f'<div class="meta"><span>{esc(offer["platform"])}</span><span>{esc(offer["category"])}</span>'
-            f'<span class="{badge}">{esc(offer["source_type"])}</span></div>'
-            f'<h2>{esc(offer["title"])}</h2>'
-            f'<p>发布于 {esc(offer["published"])} · {esc(offer["publisher"])}</p>'
-            f'<a href="{esc(offer["link"], quote=True)}" target="_blank" rel="noopener noreferrer">查看原始报道 ↗</a>'
-            '</article>'
-        )
-    body = "\n".join(cards) if cards else '<div class="empty">近 7 天没有检索到符合规则的公开优惠线索。可明天再看，或直接查看各平台 App 的领券中心。</div>'
+def build_catalog(archive_dir):
+    """Rebuild the search index from immutable, dated snapshots."""
+    days, offers = [], []
+    for path in sorted(archive_dir.glob("????-??-??.json"), reverse=True):
+        snapshot = json.loads(path.read_text(encoding="utf-8"))
+        date = snapshot["date"]
+        if path.stem != date:
+            raise ValueError(f"归档日期与文件名不符: {path}")
+        days.append({"date": date, "count": len(snapshot["offers"]), "errors": len(snapshot["errors"])})
+        offers.extend({**offer, "snapshot_date": date} for offer in snapshot["offers"])
+    return {"days": days, "offers": offers}
+
+
+def render(payload, catalog):
+    today = html.escape(payload["date"])
+    count = len(payload["offers"])
     failures = f'；{len(payload["errors"])} 个平台采集失败' if payload["errors"] else ""
+    # Escaping '<' keeps untrusted RSS titles from closing the JSON script tag.
+    embedded = json.dumps(catalog, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
     return f'''<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{today} 每日优惠线索</title>
+<title>每日优惠线索 · 历史查询</title>
 <style>
-:root{{font-family:system-ui,"Microsoft YaHei",sans-serif;color:#222;background:#f7f5f1}}*{{box-sizing:border-box}}
-body{{margin:0}}.wrap{{max-width:1080px;margin:auto;padding:24px}}header{{background:linear-gradient(120deg,#b92e21,#ef8938);color:white;padding:32px;border-radius:20px}}
+:root{{font-family:system-ui,"Microsoft YaHei",sans-serif;color:#222;background:#f7f5f1}}*{{box-sizing:border-box}}body{{margin:0}}
+.wrap{{max-width:1080px;margin:auto;padding:24px}}header{{background:linear-gradient(120deg,#b92e21,#ef8938);color:white;padding:32px;border-radius:20px}}
 h1{{font-size:clamp(26px,5vw,42px);margin:0 0 8px}}header p{{margin:0;line-height:1.6}}.notice{{background:#fff5dc;border:1px solid #edd49a;border-radius:12px;padding:15px 18px;margin:18px 0;line-height:1.7}}
-.toolbar{{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:20px 0}}input,select{{font:inherit;border:1px solid #d7d3cc;border-radius:9px;padding:10px 12px;background:white}}input{{flex:1;min-width:220px}}.grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px}}
-.card,.empty{{background:white;border:1px solid #ebe6dc;border-radius:13px;padding:18px;box-shadow:0 2px 10px #00000009}}.card h2{{font-size:17px;line-height:1.5;margin:12px 0}}.card p{{color:#666;font-size:13px}}.card a{{color:#a42e1a;font-weight:600;text-decoration:none}}.meta{{display:flex;gap:6px;flex-wrap:wrap}}.meta span{{font-size:12px;background:#f2eee8;padding:3px 7px;border-radius:5px}}.meta .official{{background:#e6f4e9;color:#216537}}.meta .media{{background:#e8eef7;color:#345d91}}.empty{{grid-column:1/-1}}footer{{margin-top:24px;color:#67615b;font-size:13px;line-height:1.6}}
-</style></head><body><main class="wrap"><header><h1>每日优惠线索</h1><p>{today}（北京时间） · 近 7 天公开信息 · {count} 条线索{failures}</p></header>
-<div class="notice"><strong>使用前请核验：</strong>这里自动整理的是报道标题线索，不代表优惠仍可领取。金额、门槛、地区、有效期和领取步骤，请点击来源后再到官方 App 或活动规则页确认。无公开可核验信息时不会编造优惠。</div>
-<div class="toolbar"><input id="search" type="search" placeholder="搜索平台或优惠"><select id="category"><option value="">全部场景</option><option>外卖餐饮与本地生活</option><option>电商购物</option><option>出行旅游与酒店</option><option>会员订阅与支付</option><option>本地生活</option></select></div>
-<div class="grid" id="offers">{body}</div><footer>覆盖 20 家平台。每天 10:30（北京时间）自动采集公开新闻 RSS；更新结果与故障状态保存在仓库 data/latest.json。仅收录正规优惠信息。</footer></main>
-<script>const s=document.querySelector('#search'),c=document.querySelector('#category');function f(){{document.querySelectorAll('.card').forEach(x=>{{x.hidden=!(x.textContent.toLowerCase().includes(s.value.trim().toLowerCase())&&(!c.value||x.textContent.includes(c.value)))}})}}s.addEventListener('input',f);c.addEventListener('change',f);</script>
-</body></html>'''
+.toolbar{{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:20px 0}}input,select,button{{font:inherit;border:1px solid #d7d3cc;border-radius:9px;padding:10px 12px;background:white}}input{{flex:1;min-width:200px}}button{{cursor:pointer}}button:disabled{{opacity:.45;cursor:default}}.count{{color:#5f5750;margin:-4px 0 14px}}
+.grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px}}.card,.empty{{background:white;border:1px solid #ebe6dc;border-radius:13px;padding:18px;box-shadow:0 2px 10px #00000009}}.card h2{{font-size:17px;line-height:1.5;margin:12px 0}}.card p{{color:#666;font-size:13px}}.card a{{color:#a42e1a;font-weight:600;text-decoration:none}}.meta{{display:flex;gap:6px;flex-wrap:wrap}}.meta span{{font-size:12px;background:#f2eee8;padding:3px 7px;border-radius:5px}}.meta .official{{background:#e6f4e9;color:#216537}}.meta .media{{background:#e8eef7;color:#345d91}}.empty{{grid-column:1/-1}}footer{{margin-top:24px;color:#67615b;font-size:13px;line-height:1.6}}#more{{display:block;margin:18px auto}}[hidden]{{display:none!important}}
+</style></head><body><main class="wrap"><header><h1>每日优惠线索</h1><p>最新归档 {today}（北京时间） · {count} 条线索{failures} · 可按日期翻阅并搜索历史</p></header>
+<div class="notice"><strong>使用前请核验：</strong>这里自动整理的是报道标题线索，历史归档保留的是当日采集结果，不代表优惠现在仍可领取。金额、门槛、地区、有效期和领取步骤，请点击来源后再到官方 App 或活动规则页确认。</div>
+<div class="toolbar"><label for="date">采集日期</label><button id="older" type="button" aria-label="前一天归档">← 较早</button><select id="date" aria-label="选择采集日期"></select><button id="newer" type="button" aria-label="后一天归档">较新 →</button><input id="search" type="search" placeholder="搜索平台、标题或来源"><select id="category" aria-label="筛选场景"><option value="">全部场景</option><option>外卖餐饮与本地生活</option><option>电商购物</option><option>出行旅游与酒店</option><option>会员订阅与支付</option><option>本地生活</option></select></div>
+<p class="count" id="count" aria-live="polite"></p><div class="grid" id="offers"></div><button id="more" type="button" hidden>显示更多</button>
+<footer>覆盖 20 家平台。每天 10:30（北京时间）自动采集；每个采集日独立存档于仓库 data/archive/，data/catalog.json 支持历史查询。历史从 {html.escape(catalog["days"][-1]["date"] if catalog["days"] else payload["date"])} 开始。仅收录正规优惠信息。</footer></main>
+<script id="catalog" type="application/json">{embedded}</script>
+<script>
+const data=JSON.parse(document.getElementById('catalog').textContent),days=data.days.map(x=>x.date);
+const date=document.getElementById('date'),search=document.getElementById('search'),category=document.getElementById('category'),grid=document.getElementById('offers'),count=document.getElementById('count'),more=document.getElementById('more');
+date.add(new Option('全部历史','all'));for(const day of data.days)date.add(new Option(day.date+' · '+day.count+' 条',day.date));
+const params=new URLSearchParams(location.search),requested=params.get('date');date.value=requested==='all'||days.includes(requested)?requested:(days[0]||'all');search.value=params.get('q')||'';
+let matches=[],shown=0;
+function addText(parent,tag,value,className){{const node=document.createElement(tag);node.textContent=value;if(className)node.className=className;parent.append(node);return node}}
+function drawMore(){{for(const offer of matches.slice(shown,shown+60)){{const card=document.createElement('article');card.className='card';const meta=addText(card,'div','','meta');addText(meta,'span',offer.snapshot_date);addText(meta,'span',offer.platform);addText(meta,'span',offer.category);addText(meta,'span',offer.source_type,offer.source_type==='官方来源线索'?'official':'media');addText(card,'h2',offer.title);addText(card,'p','发布于 '+offer.published+' · '+offer.publisher);const link=addText(card,'a','查看原始报道 ↗');link.href=offer.link;link.target='_blank';link.rel='noopener noreferrer';grid.append(card)}}shown=Math.min(shown+60,matches.length);more.hidden=shown>=matches.length}}
+function update(){{const selected=date.value,q=search.value.trim().toLocaleLowerCase();matches=data.offers.filter(x=>(selected==='all'||x.snapshot_date===selected)&&(!category.value||x.category===category.value)&&(!q||(x.platform+' '+x.title+' '+x.publisher+' '+x.category).toLocaleLowerCase().includes(q)));grid.replaceChildren();shown=0;count.textContent=(selected==='all'?'全部 '+days.length+' 天':'采集于 '+selected)+' · 找到 '+matches.length+' 条线索';if(matches.length)drawMore();else addText(grid,'div','没有符合条件的历史线索。','empty');const i=days.indexOf(selected);document.getElementById('older').disabled=i<0||i>=days.length-1;document.getElementById('newer').disabled=i<=0;const url=new URL(location.href);url.searchParams.set('date',selected);q?url.searchParams.set('q',search.value.trim()):url.searchParams.delete('q');history.replaceState(null,'',url)}}
+date.addEventListener('change',update);search.addEventListener('input',update);category.addEventListener('change',update);more.addEventListener('click',drawMore);
+document.getElementById('older').addEventListener('click',()=>{{date.value=days[days.indexOf(date.value)+1];update()}});document.getElementById('newer').addEventListener('click',()=>{{date.value=days[days.indexOf(date.value)-1];update()}});update();
+</script></body></html>'''
 
 
 def main():
@@ -189,10 +201,15 @@ def main():
     today = dt.datetime.now(CST).date()
     offers, errors = collect(today)
     payload = {"date": today.isoformat(), "timezone": "Asia/Shanghai", "source": "Google News RSS", "offers": offers, "errors": errors}
+    archive_dir = args.json_output.parent / "archive"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    (archive_dir / f"{today.isoformat()}.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    catalog = build_catalog(archive_dir)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.json_output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(render(payload), encoding="utf-8")
+    args.output.write_text(render(payload, catalog), encoding="utf-8")
     args.json_output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (args.json_output.parent / "catalog.json").write_text(json.dumps(catalog, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
     print(f"{today}: {len(offers)} 条线索，{len(errors)} 个平台采集失败")
     for error in errors:
         print(error, file=sys.stderr)
