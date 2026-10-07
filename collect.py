@@ -200,6 +200,74 @@ def parse_item(item, platform, category, today):
 
 
 
+
+SCENES = {
+    "外卖、本地生活与餐饮", "外卖餐饮与本地生活", "本地生活",
+    "电商购物", "出行、旅游与酒店", "出行旅游与酒店",
+    "会员订阅与综合补贴", "会员订阅与支付", "信用卡优惠",
+}
+
+
+def load_doubao_offers(today, incoming_dir=Path("incoming")):
+    """Load a manually reviewed, date-matched Doubao JSON handoff file."""
+    path = incoming_dir / f"{today.isoformat()}.json"
+    if not path.exists():
+        return [], []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [], [f"豆包交接文件无法读取: {exc}"]
+    if payload.get("date") != today.isoformat() or not isinstance(payload.get("offers"), list):
+        return [], ["豆包交接文件日期或 offers 格式不正确"]
+    accepted, errors = [], []
+    for index, raw in enumerate(payload["offers"], 1):
+        if not isinstance(raw, dict):
+            errors.append(f"豆包第 {index} 条不是对象")
+            continue
+        scene = raw.get("scene")
+        source_url = raw.get("source_url") or raw.get("link")
+        required = ("company", "title", "source_name")
+        if any(not isinstance(raw.get(key), str) or not raw[key].strip() for key in required):
+            errors.append(f"豆包第 {index} 条缺少 company/title/source_name")
+            continue
+        if scene not in SCENES:
+            errors.append(f"豆包第 {index} 条场景不在允许列表: {scene}")
+            continue
+        parsed_url = urllib.parse.urlparse(source_url or "")
+        if parsed_url.scheme != "https" or not parsed_url.netloc:
+            errors.append(f"豆包第 {index} 条缺少有效 HTTPS 来源链接")
+            continue
+        valid_until = raw.get("valid_until")
+        if valid_until:
+            try:
+                dt.date.fromisoformat(valid_until)
+            except (TypeError, ValueError):
+                errors.append(f"豆包第 {index} 条 valid_until 日期无效")
+                continue
+        published_at = raw.get("published_at") or today.isoformat()
+        try:
+            dt.date.fromisoformat(published_at)
+        except (TypeError, ValueError):
+            published_at = today.isoformat()
+        item = {
+            "platform": raw["company"].strip(), "category": scene,
+            "title": raw["title"].strip(), "published": published_at,
+            "publisher": raw["source_name"].strip(),
+            "source_type": "豆包整理（待核对）",
+            "link": source_url, "discount_in_title": bool(AMOUNT.search(raw["title"])),
+            "summary": raw.get("summary"), "date": today.isoformat(),
+            "company": raw["company"].strip(), "scene": scene,
+            "source_url": source_url, "source_name": raw["source_name"].strip(),
+            "published_at": published_at, "deal_amount": raw.get("deal_amount"),
+            "threshold": raw.get("threshold"), "valid_until": valid_until,
+            "region": raw.get("region"), "entry": raw.get("entry"),
+            "how_to_use": raw.get("how_to_use"),
+            "verify_status": "豆包标注已查证，待复核" if raw.get("verify_status") == "已查证" else "一方称",
+        }
+        accepted.append(item)
+    return accepted, errors
+
+
 def collect(today):
     offers, errors = [], []
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
@@ -211,10 +279,13 @@ def collect(today):
                 offers.extend(filter(None, (parse_item(item, name, category, today) for item in items)))
             except (OSError, ValueError, ET.ParseError) as exc:
                 errors.append(f"{platform}: {type(exc).__name__}: {exc}")
-    if len(errors) == len(PLATFORMS):
-        raise RuntimeError("全部 20 个平台采集失败，保留上一次页面。")
+    doubao_offers, doubao_errors = load_doubao_offers(today)
+    offers.extend(doubao_offers)
+    errors.extend(doubao_errors)
+    if not offers:
+        raise RuntimeError("自动采集与豆包交接均无有效内容，保留上一次页面。")
     seen, unique, per_platform = set(), [], {}
-    for item in sorted(offers, key=lambda x: (x["published"], x["discount_in_title"], x["source_type"] == "官方来源线索"), reverse=True):
+    for item in sorted(offers, key=lambda x: (x["source_type"].startswith("豆包"), x["published"], x["discount_in_title"], x["source_type"] == "官方来源线索"), reverse=True):
         key = re.sub(r"\s+", "", item["title"]).casefold()
         similar = any(
             old["platform"] == item["platform"]
