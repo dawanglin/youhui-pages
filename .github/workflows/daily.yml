@@ -7,6 +7,7 @@ on:
       - collect.py
       - page_template.html
       - .github/workflows/daily.yml
+      - 'incoming/*.json'
   schedule:
     - cron: '30 2 * * *' # 北京时间 10:30
   workflow_dispatch:
