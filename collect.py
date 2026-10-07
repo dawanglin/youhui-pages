@@ -75,7 +75,7 @@ ALIASES = {
 }
 PROMO = re.compile(r"优惠|消费券|补贴|红包|折扣|满减|立减|买一送一|免单|特价|直降|领券|返现|折上折|免费领|信用卡|积分抵现|免年费")
 AMOUNT = re.compile(r"(?:\d+(?:\.\d+)?\s*(?:元|折|%))|(?:满\s*\d+\s*减\s*\d+)")
-SPAM = re.compile(r"怎么领|领取入口|口令|攻略|保姆级|省钱技巧|一文(看懂|讲透)|教程|指南|怎么(买|抢|领|选)|避坑|合集|汇总|大全|最划算|FAQ|[?？]|哪个.*靠谱|神价实测|博彩|赌博|套现|刷单")
+SPAM = re.compile(r"怎么领|领取入口|口令|攻略|保姆级|省钱技巧|一文(看懂|讲透)|教程|指南|怎么(买|抢|领|选)|避坑|合集|汇总|大全|最划算|FAQ|[?？]|哪个.*靠谱|神价实测|博彩|赌博|套现|刷单|澳门威斯尼斯人|官方网站下载|虚假折扣|欧盟被罚|假网站")
 FUTURE_EVENT = re.compile(r"双\s*11|双十一")
 CURRENT_ACTION = re.compile(r"已开启|已上线|今日|今天|现在|正在|现领|开抢|发放|启动")
 OFFICIAL_DOMAINS = (".gov.cn", "jd.com", "meituan.com", "taobao.com", "tmall.com", "pinduoduo.com", "mi.com", "ctrip.com", "alipay.com", "vip.com", "bilibili.com", "tencent.com", "douyin.com")
@@ -90,7 +90,11 @@ def rss_url(query):
 
 def fetch(platform):
     category, terms = PLATFORMS[platform]
-    query = "(" + " OR ".join(terms.split()) + ") (优惠券 OR 消费券 OR 补贴 OR 红包 OR 折扣)"
+    if category == "信用卡优惠":
+        keywords = "信用卡优惠 OR 消费立减 OR 满减 OR 积分抵现 OR 免年费 OR 免息 OR 免密支付 OR 消费券"
+    else:
+        keywords = "优惠券 OR 消费券 OR 补贴 OR 红包 OR 折扣 OR 满减 OR 立减 OR 会员折扣 OR 以旧换新"
+    query = "(" + " OR ".join(terms.split()) + ") (" + keywords + ")"
     request = urllib.request.Request(rss_url(query), headers=HEADERS)
     with urllib.request.urlopen(request, timeout=20) as response:
         data = response.read(2_000_000)
