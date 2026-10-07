@@ -322,7 +322,7 @@ def collect(today):
         raise RuntimeError("自动采集与豆包交接均无有效内容，保留上一次页面。")
     seen, unique, per_platform = set(), [], {}
     for item in sorted(offers, key=lambda x: (x["source_type"].startswith("豆包"), x["published"], x["discount_in_title"], x["source_type"] == "官方来源线索"), reverse=True):
-        key = re.sub(r"\s+", "", item["title"]).casefold()
+        key = (item["platform"].casefold(), re.sub(r"\s+", "", item["title"]).casefold())
         similar = not item["source_type"].startswith("豆包") and any(
             old["platform"] == item["platform"]
             and difflib.SequenceMatcher(None, old["title"], item["title"]).ratio() > 0.72
