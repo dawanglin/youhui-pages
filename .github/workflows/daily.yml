@@ -38,6 +38,7 @@ jobs:
           git add index.html data/
           if ! git diff --cached --quiet; then
             git commit -m "每日优惠线索 $(date -u +%F)"
+            git pull --rebase origin master
             git push
           fi
       - uses: actions/configure-pages@v5
