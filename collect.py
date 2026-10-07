@@ -81,15 +81,15 @@ def fetch(platform):
 def extract_deal_amount(title):
     """Return only an explicit discount phrase; never infer missing offer details."""
     patterns = (
-        r"满\\s*\\d+(?:\\.\\d+)?\\s*元?\\s*减\\s*\\d+(?:\\.\\d+)?\\s*元?",
-        r"(?:至高|最高)?\\s*(?:补贴|立减|优惠)\\s*(?:至高|最高)?\\s*\\d+(?:\\.\\d+)?\\s*(?:元|%)",
-        r"\\d+(?:\\.\\d+)?\\s*%\\s*补贴",
-        r"\\d+(?:\\.\\d+)?\\s*折",
+        r"满\s*\d+(?:\.\d+)?\s*元?\s*减\s*\d+(?:\.\d+)?\s*元?",
+        r"(?:至高|最高)?\s*(?:补贴|立减|优惠)\s*(?:至高|最高)?\s*\d+(?:\.\d+)?\s*(?:元|%)",
+        r"\d+(?:\.\d+)?\s*%\s*补贴",
+        r"\d+(?:\.\d+)?\s*折",
     )
     for pattern in patterns:
         match = re.search(pattern, title)
         if match:
-            return re.sub(r"\\s+", "", match.group(0))
+            return re.sub(r"\s+", "", match.group(0))
     return None
 
 
