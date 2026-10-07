@@ -21,7 +21,7 @@
 </head><body><main class="shell">
 <div class="top"><div class="brand">每日情报 <small>线索清楚，规则不猜</small></div><nav class="nav"><a href="https://dawanglin.github.io/news-daily/">新闻</a><a href="https://dawanglin.github.io/youhui-pages/" aria-current="page">优惠</a></nav></div>
 <section class="intro"><div><h1>优惠情报</h1><p>先看力度与适用条件，再决定要不要打开活动页。</p></div><div class="stamp">最新采集 __DATE__（北京时间）<br>当日 __COUNT__ 条线索</div></section>
-<div class="note"><strong>请先核对：</strong>当前采集来自公开报道 RSS，并未逐条打开商家 App 核验。只展示标题明确写出的优惠力度；门槛、地区、有效期和领取步骤未说明时会留空提示。实际规则以平台官方页面为准。</div>
+<div class="note"><strong>请先核对：</strong>目前只读取公开 RSS 的标题、时间和来源，没有解析报道正文，也没有核验商家 App。只展示标题明确写出的力度；门槛、地区、有效期和领取步骤未说明时会留空。实际规则请以平台官方页面为准。</div>
 <div class="filters"><div class="step"><button id="older" type="button">← 较早</button><button id="newer" type="button">较新 →</button></div><select class="control" id="date" aria-label="选择采集日期"></select><input class="control" id="search" type="search" placeholder="搜索平台、内容或来源"><select class="control" id="category"><option value="">全部场景</option><option>外卖餐饮与本地生活</option><option>电商购物</option><option>出行旅游与酒店</option><option>会员订阅与支付</option><option>本地生活</option></select></div>
 <div class="columns"><section><div class="summary" id="count" aria-live="polite"></div><div id="offers"></div><button id="more" type="button" hidden>显示更多</button></section><aside class="aside"><h2>标题中明确写出力度</h2><p>仅作线索展示，不是推荐排名，也不代表仍可领取。</p><div id="picks"></div></aside></div>
 <footer>公开报道线索不等于官方领取入口。打开来源和平台规则核实活动期限、资格及适用范围。历史归档按采集日保存，不回填或改写旧记录。每天 10:30（北京时间）采集。</footer>
