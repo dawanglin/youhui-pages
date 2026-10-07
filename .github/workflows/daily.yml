@@ -1,6 +1,12 @@
 name: 每日优惠采集与网页发布
 
 on:
+  push:
+    branches: [master]
+    paths:
+      - collect.py
+      - page_template.html
+      - .github/workflows/daily.yml
   schedule:
     - cron: '30 2 * * *' # 北京时间 10:30
   workflow_dispatch:
