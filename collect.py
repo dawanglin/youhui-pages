@@ -208,6 +208,38 @@ SCENES = {
 }
 
 
+def normalize_valid_until(value, today):
+    """Return an ISO end date when one is explicit, while preserving the source wording."""
+    if not isinstance(value, str) or not value.strip():
+        return None, None
+    value = value.strip()
+    try:
+        return dt.date.fromisoformat(value).isoformat(), None
+    except ValueError:
+        pass
+    full_dates = list(re.finditer(r"(20\\d{2})[-/.年](\\d{1,2})[-/.月](\\d{1,2})日?", value))
+    if full_dates:
+        last = full_dates[-1]
+        year, month, day = map(int, last.groups())
+        tail = value[last.end():]
+        short_end = re.search(r"(?:至|到|—|-)\\s*(\\d{1,2})[-/.月](\\d{1,2})日?", tail)
+        if short_end:
+            end_month, end_day = map(int, short_end.groups())
+            try:
+                end_date = dt.date(year, end_month, end_day)
+                start_date = dt.date(year, month, day)
+                if end_date < start_date:
+                    end_date = dt.date(year + 1, end_month, end_day)
+                return end_date.isoformat(), value
+            except ValueError:
+                pass
+        try:
+            return dt.date(year, month, day).isoformat(), value
+        except ValueError:
+            pass
+    return None, value
+
+
 def load_doubao_offers(today, incoming_dir=Path("incoming")):
     """Load a manually reviewed, date-matched Doubao JSON handoff file."""
     path = incoming_dir / f"{today.isoformat()}.json"
@@ -226,9 +258,8 @@ def load_doubao_offers(today, incoming_dir=Path("incoming")):
             continue
         scene = raw.get("scene")
         source_url = raw.get("source_url") or raw.get("link")
-        required = ("company", "title", "source_name")
-        if any(not isinstance(raw.get(key), str) or not raw[key].strip() for key in required):
-            errors.append(f"豆包第 {index} 条缺少 company/title/source_name")
+        if not isinstance(raw.get("company"), str) or not raw["company"].strip() or not isinstance(raw.get("title"), str) or not raw["title"].strip():
+            errors.append(f"豆包第 {index} 条缺少 company/title")
             continue
         if scene not in SCENES:
             errors.append(f"豆包第 {index} 条场景不在允许列表: {scene}")
@@ -237,32 +268,34 @@ def load_doubao_offers(today, incoming_dir=Path("incoming")):
         if parsed_url.scheme != "https" or not parsed_url.netloc:
             errors.append(f"豆包第 {index} 条缺少有效 HTTPS 来源链接")
             continue
-        valid_until = raw.get("valid_until")
-        if valid_until:
-            try:
-                dt.date.fromisoformat(valid_until)
-            except (TypeError, ValueError):
-                errors.append(f"豆包第 {index} 条 valid_until 日期无效")
-                continue
-        published_at = raw.get("published_at") or today.isoformat()
+        valid_until, valid_until_note = normalize_valid_until(raw.get("valid_until"), today)
+        if valid_until and dt.date.fromisoformat(valid_until) < today:
+            errors.append(f"豆包第 {index} 条活动已过截止日期")
+            continue
+        published_at = raw.get("published_at")
         try:
-            dt.date.fromisoformat(published_at)
+            if published_at:
+                published_at = dt.date.fromisoformat(published_at).isoformat()
         except (TypeError, ValueError):
-            published_at = today.isoformat()
+            published_at = None
+        source_name = raw.get("source_name")
+        if not isinstance(source_name, str) or not source_name.strip():
+            source_name = parsed_url.hostname or "来源未注明"
         item = {
             "platform": raw["company"].strip(), "category": scene,
-            "title": raw["title"].strip(), "published": published_at,
-            "publisher": raw["source_name"].strip(),
+            "title": raw["title"].strip(), "published": published_at or "",
+            "publisher": source_name.strip(),
             "source_type": "豆包整理（待核对）",
             "link": source_url, "discount_in_title": bool(AMOUNT.search(raw["title"])),
             "summary": raw.get("summary"), "date": today.isoformat(),
             "company": raw["company"].strip(), "scene": scene,
-            "source_url": source_url, "source_name": raw["source_name"].strip(),
+            "source_url": source_url, "source_name": source_name.strip(),
             "published_at": published_at, "deal_amount": raw.get("deal_amount"),
             "threshold": raw.get("threshold"), "valid_until": valid_until,
+            "valid_until_note": valid_until_note,
             "region": raw.get("region"), "entry": raw.get("entry"),
             "how_to_use": raw.get("how_to_use"),
-            "verify_status": "豆包标注已查证，待复核" if raw.get("verify_status") == "已查证" else "一方称",
+            "verify_status": "豆包标注已查证，待复核" if raw.get("verify_status") == "已查证" else "待核对",
         }
         accepted.append(item)
     return accepted, errors
@@ -280,8 +313,11 @@ def collect(today):
             except (OSError, ValueError, ET.ParseError) as exc:
                 errors.append(f"{platform}: {type(exc).__name__}: {exc}")
     doubao_offers, doubao_errors = load_doubao_offers(today)
-    offers.extend(doubao_offers)
     errors.extend(doubao_errors)
+    # When a dated Doubao handoff exists, it is the primary editorial source.
+    # Keep RSS as a fallback only for days without an accepted handoff.
+    if doubao_offers:
+        offers = doubao_offers
     if not offers:
         raise RuntimeError("自动采集与豆包交接均无有效内容，保留上一次页面。")
     seen, unique, per_platform = set(), [], {}
@@ -292,11 +328,12 @@ def collect(today):
             and difflib.SequenceMatcher(None, old["title"], item["title"]).ratio() > 0.72
             for old in unique
         )
-        if key not in seen and not similar and per_platform.get(item["platform"], 0) < 5:
+        under_limit = item["source_type"].startswith("豆包") or per_platform.get(item["platform"], 0) < 5
+        if key not in seen and not similar and under_limit:
             seen.add(key)
             unique.append(item)
             per_platform[item["platform"]] = per_platform.get(item["platform"], 0) + 1
-    return unique[:100], errors
+    return unique, errors
 
 
 def build_catalog(archive_dir):
