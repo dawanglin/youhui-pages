@@ -323,7 +323,7 @@ def collect(today):
     seen, unique, per_platform = set(), [], {}
     for item in sorted(offers, key=lambda x: (x["source_type"].startswith("豆包"), x["published"], x["discount_in_title"], x["source_type"] == "官方来源线索"), reverse=True):
         key = re.sub(r"\s+", "", item["title"]).casefold()
-        similar = any(
+        similar = not item["source_type"].startswith("豆包") and any(
             old["platform"] == item["platform"]
             and difflib.SequenceMatcher(None, old["title"], item["title"]).ratio() > 0.72
             for old in unique
