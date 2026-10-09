@@ -1,5 +1,8 @@
 # 豆包优惠内容交接说明
 
+
+本交接属于“每日新闻 + 生活优惠”联合项目的一部分。请先看[新闻主仓库的总交接说明](https://github.com/dawanglin/news-daily/blob/main/PROJECT_HANDOFF.md)和[每日联合交接表](https://github.com/dawanglin/news-daily/blob/main/DAILY_HANDOFF_TABLE.md)。新闻由 news-daily 自动抓取；豆包在本仓库只负责优惠 JSON。新闻页与优惠详情页各自发布、各自保存历史，通过入口关联，不混写两类内容。
+
 ## 协作目标
 
 豆包负责发现和整理中国大陆日常可用的优惠线索；本仓库负责校验格式、生成优惠页面、保存每日快照并发布 GitHub Pages。内容优先解决“是什么优惠、我能不能用、怎么参加、什么时候截止”，不是单纯转载新闻。
