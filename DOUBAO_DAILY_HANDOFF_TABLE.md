@@ -1,5 +1,8 @@
 # 豆包每日优惠交接表
 
+
+本表是联合交接表中的“优惠模块明细”。查看[新闻 + 优惠总交接说明](https://github.com/dawanglin/news-daily/blob/main/PROJECT_HANDOFF.md)及[每日联合交接表](https://github.com/dawanglin/news-daily/blob/main/DAILY_HANDOFF_TABLE.md)。新闻数据由主仓库自动生成，不要抄写到优惠 JSON；本表只用于填写和核对优惠。
+
 用途：豆包按此表整理当天的优惠内容；系统实际读取的是配套 JSON，不读取这张 Markdown 表本身。完整流程和边界见 [DOUBAO_HANDOFF.md](DOUBAO_HANDOFF.md)。
 
 ## 每日批次信息
